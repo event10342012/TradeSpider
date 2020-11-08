@@ -102,3 +102,13 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# data
+*.csv
+*.zip
+
+# config
+*.cfg
+
+# Pycharm
+.idea
