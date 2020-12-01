@@ -28,8 +28,8 @@ class FuturesSpider(scrapy.Spider):
 
     def parse(self, response: scrapy.http.Response, **kwargs):
         ed = datetime.strptime(getattr(self, 'execution_date', None), '%Y%m%d')
-        rows = response.xpath("//tr[@class='color']")
-        for row in rows:
+        rows = response.xpath("//table[@class='table_c']")[1].xpath("tr")
+        for row in rows[1:]:
             dt = row.xpath("td/text()")[1].get()
             dt = datetime.strptime(dt, '%Y/%m/%d')
             if ed == dt:
