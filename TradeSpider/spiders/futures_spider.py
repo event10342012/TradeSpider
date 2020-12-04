@@ -4,8 +4,8 @@ from datetime import datetime
 from zipfile import ZipFile
 
 import pandas as pd
-import scrapy
 import psycopg2
+import scrapy
 
 from TradeSpider.utils import get_spider_root
 
@@ -28,6 +28,10 @@ class FuturesSpider(scrapy.Spider):
 
     def parse(self, response: scrapy.http.Response, **kwargs):
         ed = datetime.strptime(getattr(self, 'execution_date', None), '%Y%m%d')
+
+        if ed is None:
+            raise AttributeError('execution_date attribute should be given.')
+
         rows = response.xpath("//table[@class='table_c']")[1].xpath("tr")
         for row in rows[1:]:
             dt = row.xpath("td/text()")[1].get()
@@ -55,21 +59,58 @@ class FuturesSpider(scrapy.Spider):
             zipfile.extractall(self.data_dir)
         self.logger.info('Unzip data')
 
-        self.bulk_insert()
+        bulk_file_path = self.resample()
 
-    def bulk_insert(self):
+        self.bulk_insert(bulk_file_path)
+
+    def resample(self):
         ed = datetime.strptime(getattr(self, 'execution_date', None), '%Y%m%d')
-        file_path = os.path.join(self.data_dir, f'Daily_{ed.strftime("%Y_%m_%d")}.csv')
+        ed = ed.strftime('%Y_%m_%d')
 
-        row_df = pd.read_csv(file_path, encoding='big5', dtype=str)
-        row_df = row_df.iloc[:, :-3]
-        row_df.to_csv(file_path, index=None)
-        self.logger.info('Clean data')
+        cols = ['txn_date', 'commodity_id', 'expired_date', 'txn_time', 'price',
+                'volume', 'near_price', 'far_price', 'call_auction']
 
+        input_filepath = os.path.join(self.data_dir, f'Daily_{ed}.csv')
+        df = pd.read_csv(input_filepath, skiprows=1, names=cols, encoding='big5', dtype=str)
+        df['txn_dt'] = pd.to_datetime(df['txn_date'] + ' ' + df['txn_time'])
+
+        df.set_index('txn_dt', inplace=True)
+        df.sort_values(['commodity_id', 'expired_date'], inplace=True)
+
+        df['commodity_id'] = df['commodity_id'].str.strip()
+        df['expired_date'] = df['expired_date'].str.strip()
+        df['price'] = df['price'].astype(float)
+        df['volume'] = df['volume'].astype(int)
+
+        # re-sample time series
+        open_price = df.groupby(['commodity_id', 'expired_date']).resample('1min')['price'].first().fillna(
+            method='ffill').rename('open_price')
+        high_price = df.groupby(['commodity_id', 'expired_date']).resample('1min')['price'].max().fillna(
+            method='ffill').rename('high_price')
+        low_price = df.groupby(['commodity_id', 'expired_date']).resample('1min')['price'].min().fillna(
+            method='ffill').rename('low_price')
+        close_price = df.groupby(['commodity_id', 'expired_date']).resample('1min')['price'].last().fillna(
+            method='ffill').rename('close_price')
+        volume = df.groupby(['commodity_id', 'expired_date']).resample('1min')['volume'].sum().fillna(
+            method='ffill').rename('volume')
+
+        txn_df = pd.merge(open_price, high_price, left_index=True, right_index=True)
+        txn_df = txn_df.merge(low_price, left_index=True, right_index=True)
+        txn_df = txn_df.merge(close_price, left_index=True, right_index=True)
+        txn_df = txn_df.merge(volume, left_index=True, right_index=True)
+
+        txn_df.reset_index(['commodity_id', 'expired_date'], inplace=True)
+
+        output_filepath = os.path.join(self.data_dir, f'futures_1min_{ed}.csv')
+        txn_df.to_csv(output_filepath)
+        self.logger.info('resample data to 1min')
+        return output_filepath
+
+    def bulk_insert(self, file_path):
         sql = f'''
-        truncate table ods.futures.tw_futures_txn_stage;
-
-        COPY ods.futures.tw_futures_txn_stage
+        truncate table futures.txn_stage;
+        
+        COPY futures.txn_stage
             FROM '{file_path}'
             (HEADER TRUE, FORMAT CSV, ENCODING 'UTF8');
         '''
