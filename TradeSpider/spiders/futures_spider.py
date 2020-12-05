@@ -118,3 +118,4 @@ class FuturesSpider(scrapy.Spider):
                 cursor.execute(txn_sql)
             conn.commit()
         self.logger.info('Bulk insert data')
+        'ee'
