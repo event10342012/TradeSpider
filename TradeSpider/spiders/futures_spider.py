@@ -1,15 +1,11 @@
-import logging
 import os
 from datetime import datetime
 from zipfile import ZipFile
 
 import pandas as pd
-import psycopg2
 import scrapy
 
-from TradeSpider.utils import get_spider_root
-
-logging.getLogger('airflow.task')
+from TradeSpider.utils import get_spider_root, get_conn, read_sql
 
 
 # scrapy crawl quotes -a tag=humor
@@ -60,7 +56,6 @@ class FuturesSpider(scrapy.Spider):
         self.logger.info('Unzip data')
 
         bulk_file_path = self.resample()
-
         self.bulk_insert(bulk_file_path)
 
     def resample(self):
@@ -107,22 +102,19 @@ class FuturesSpider(scrapy.Spider):
         return output_filepath
 
     def bulk_insert(self, file_path):
-        sql = f'''
+        bulk_sql = f'''
         truncate table futures.txn_stage;
         
         COPY futures.txn_stage
             FROM '{file_path}'
             (HEADER TRUE, FORMAT CSV, ENCODING 'UTF8');
         '''
-        conn_args = dict(
-            host='localhost',
-            user='leochen',
-            # password=conn.password,
-            dbname='ods',
-            port='5432',
-        )
-        with psycopg2.connect(**conn_args) as conn:
+
+        txn_sql = read_sql('txn')
+
+        with get_conn() as conn:
             with conn.cursor() as cursor:
-                cursor.execute(sql)
+                cursor.execute(bulk_sql)
+                cursor.execute(txn_sql)
             conn.commit()
         self.logger.info('Bulk insert data')
