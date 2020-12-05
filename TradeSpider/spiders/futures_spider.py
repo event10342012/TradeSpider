@@ -4,6 +4,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 import scrapy
+from glob import glob
 
 from TradeSpider.utils import get_spider_root, get_conn, read_sql
 
@@ -43,7 +44,7 @@ class FuturesSpider(scrapy.Spider):
     def download(self, response):
         ed = datetime.strptime(getattr(self, 'execution_date', None), '%Y%m%d')
 
-        file_path = os.path.join(self.data_dir, f'{ed.strftime("%Y%m%d")}_futures.zip')
+        file_path = os.path.join(self.data_dir, f'{ed.strftime("%Y_%m_%d")}_futures.zip')
 
         # download file
         with open(os.path.join(self.data_dir, file_path), 'wb') as file:
@@ -57,6 +58,9 @@ class FuturesSpider(scrapy.Spider):
 
         bulk_file_path = self.resample()
         self.bulk_insert(bulk_file_path)
+
+        self.clear()
+        self.logger.info('clear file')
 
     def resample(self):
         ed = datetime.strptime(getattr(self, 'execution_date', None), '%Y%m%d')
@@ -118,4 +122,10 @@ class FuturesSpider(scrapy.Spider):
                 cursor.execute(txn_sql)
             conn.commit()
         self.logger.info('Bulk insert data')
-        'ee'
+
+    def clear(self):
+        ed = datetime.strptime(getattr(self, 'execution_date', None), '%Y%m%d')
+        ed = ed.strftime('%Y_%m_%d')
+        files = glob(os.path.join(self.data_dir, f'*{ed}*'))
+        for file in files:
+            os.remove(file)
