@@ -6,7 +6,7 @@ import pandas as pd
 import scrapy
 from glob import glob
 
-from TradeSpider.utils import get_spider_root, get_conn, read_sql
+from utils import get_spider_root, get_conn, read_sql
 
 
 # scrapy crawl quotes -a tag=humor
