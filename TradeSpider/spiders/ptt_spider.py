@@ -30,14 +30,11 @@ class PttSpider(scrapy.Spider):
             yield response.follow(next_page, callback=self.parse)
 
     def parse_content(self, response: scrapy.http.Response):
-        try:
-            item = PttItem()
-            item['content'] = response.xpath("//div[@id='main-content']/text()").get().replace('\n', '')
-            meta = response.xpath("//span[@class='article-meta-value']")
-            item['author'] = meta[0].xpath('text()').get()
-            item['title'] = meta[2].xpath('text()').get()
-            item['date'] = meta[3].xpath('text()').get()
-            item['url'] = response.url
-            yield item
-        except Exception:
-            pass
+        item = PttItem()
+        item['content'] = response.xpath("//div[@id='main-content']/text()").get().replace('\n', '')
+        meta = response.xpath("//span[@class='article-meta-value']")
+        item['author'] = meta[0].xpath('text()').get()
+        item['title'] = meta[2].xpath('text()').get()
+        item['date'] = meta[3].xpath('text()').get()
+        item['url'] = response.url
+        yield item
