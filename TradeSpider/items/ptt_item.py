@@ -1,10 +1,8 @@
 from scrapy import Item, Field
 
 
-class TitleItem(Item):
-    id = Field()
-    title_name = Field()
-    push_num = Field()
+class PttItem(Item):
+    title = Field()
     author = Field()
     date = Field()
     url = Field()
